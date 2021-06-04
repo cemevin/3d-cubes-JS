@@ -367,16 +367,14 @@ window.onkeydown = function( event ) {
 			onMove(obj, x,y,z)
 		}
 	}
-	else if (mode == ROTATE || mode == ROTATE_LIGHT) {
-		if (mode == ROTATE) {
-			for (var i = 0; i < drawableObjects.length; i++) {
-				var obj = drawableObjects[i]
-				onRotate(obj, x,y,z, obj.transform)
-			}
+	else if (mode == ROTATE) {
+		for (var i = 0; i < drawableObjects.length; i++) {
+			var obj = drawableObjects[i]
+			onRotate(obj, x,y,z, obj.transform)
 		}
-		else {
-			onRotateLight(x,y,z)
-		}
+	}
+	else if (mode == ROTATE_LIGHT) {
+		onRotateLight(x,y,z)
 	}
 	else if (mode == SCALE) {
 		for (var i = 0; i < drawableObjects.length; i++) {
