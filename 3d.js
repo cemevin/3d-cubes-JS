@@ -45,13 +45,21 @@ function makeRect(x,y,z,width,height,depth) {
 			[xmin, ymax, zmax],
 		],
 		drawpoints: [],
-		triangles : [
-			[1,0,3], [3,2,1], // front 
-			[5,4,7], [7,6,5], // back
-			[0,4,7], [7,3,0], // left
+		triangles : [ // point indices
+			[3,0,1], [1,2,3], // back 
+			[5,4,7], [7,6,5], // front
+			[7,4,0], [0,3,7], // left
 			[2,1,5], [5,6,2], // right
-			[2,3,7], [7,6,2], // up
-			[1,0,4], [1,5,4] // down
+			[7,3,2], [2,6,7], // down
+			[1,0,4], [4,5,1] // up
+		],
+		faces : [ // triangle indices
+			[0,1], 	// back 
+			[2,3], 	// front
+			[4,5], 	// left .
+			[6,7], 	// right .
+			[8,9], 	// down
+			[10,11] // up
 		],
 		transform: [x,y,z],
 		control : 0,
@@ -97,8 +105,6 @@ function updateDrawPoints() {
 			obj.drawpoints[i] = [...obj.points[i]];
 		}
 	}
-		
-	applyPerspective()
 }
 
 function applyPerspective() {
@@ -125,24 +131,50 @@ function applyPerspective() {
 	}
 }
 
+function getTriangle(parent, index, getDrawPoints) {
+	var t = parent.triangles[index]
+
+	if (!getDrawPoints)
+		return [parent.points[t[0]], parent.points[t[1]], parent.points[t[2]]]
+	
+	return [parent.drawpoints[t[0]], parent.drawpoints[t[1]], parent.drawpoints[t[2]]]
+}
+
 function getTriangles() {
-	var triangles = []
+	var faces = []
 
 	for (var r = 0; r < drawableObjects.length; r++) {
 		var obj = drawableObjects[r]
-		for (var i = 0; i < obj.triangles.length; i++) {
-			var triangle = obj.triangles[i]
-			var points = [obj.points[triangle[0]], obj.points[triangle[1]], obj.points[triangle[2]]]
-			var drawpoints = [obj.drawpoints[triangle[0]], obj.drawpoints[triangle[1]], obj.drawpoints[triangle[2]]]
-			triangles.push({points: points, drawpoints: drawpoints})
+		for (var i = 0; i < obj.faces.length; i++) {
+			var face = obj.faces[i]
+
+			var triangles = []
+			for (let t = 0; t < face.length; t++) {
+				triangles.push({drawpoints: getTriangle(obj, face[t], true), points: getTriangle(obj, face[t], false)})
+			}
+
+			faces.push(triangles)
 		}
 	}
 
-	triangles = triangles.sort(function(a, b) {
-		return a.drawpoints[0][2] * a.drawpoints[1][2] * a.drawpoints[2][2] - b.drawpoints[0][2] * b.drawpoints[1][2] * b.drawpoints[2][2]
+	faces.sort(function(face1, face2) {
+		var arr1 = face1.flat(1)
+		var arr2 = face2.flat(1)
+
+		var z_a = 0;
+		for (let i = 0; i < arr1.length; i++)
+			for (let j = 0; j < arr1[i].points.length; j++) 
+				z_a += arr1[i].points[j][2]
+
+		var z_b = 0;
+		for (let i = 0; i < arr2.length; i++)
+			for (let j = 0; j < arr2[i].points.length; j++) 
+				z_b += arr2[i].points[j][2]
+
+		return z_a - z_b
 	});
 
-	return triangles
+	return faces.flat(2) // return a list of triangles
 }
 
 ///////////////////
@@ -347,19 +379,29 @@ window.onkeydown = function( event ) {
 	}
 
 	var mult = 0;
+
+	var x;
+  	var y;
+	var z;
+
 	if (mode == MOVE) {
 		mult = SPEED_MOVE;
+		x = key == "ArrowLeft" ? -mult : key == "ArrowRight" ? mult : 0;
+	  	y = key == "ArrowUp" ? -mult : key == "ArrowDown" ? mult : 0;
+		z = key == "z" ? -mult : key == "x" ? mult : 0;
 	}
 	else if (mode == ROTATE || mode == ROTATE_LIGHT) {
 		mult = SPEED_ROTATE
+		y = key == "ArrowLeft" ? mult : key == "ArrowRight" ? -mult : 0;
+	  	x = key == "ArrowUp" ? mult : key == "ArrowDown" ? -mult : 0;
+		z = key == "z" ? -mult : key == "x" ? mult : 0;
 	}
 	else {
 		mult = SPEED_SCALE;
+		x = key == "ArrowLeft" ? -mult : key == "ArrowRight" ? mult : 0;
+	  	y = key == "ArrowUp" ? mult : key == "ArrowDown" ? -mult : 0;
+		z = key == "z" ? -mult : key == "x" ? mult : 0;
 	}
-
-	let x = key == "ArrowLeft" ? -mult : key == "ArrowRight" ? mult : 0;
-  	let y = key == "ArrowUp" ? -mult : key == "ArrowDown" ? mult : 0;
-	let z = key == "z" ? -mult : key == "x" ? mult : 0;
 
 	if (mode == MOVE) {
 		for (var i = 0; i < drawableObjects.length; i++) {
@@ -400,30 +442,20 @@ function draw() {
 
 	var triangles = getTriangles()
 
-	g.setStrokeStyle(1);
 	for (var i = 0; i < triangles.length; i++) {
 		var triangle = triangles[i]
 		var points = triangle.points
 		var drawpoints = triangle.drawpoints
 
 		// calculate shininess based on surface normal/light relationship
-		var vec1 = [points[1][0] - points[0][0], points[1][1] - points[0][1], points[1][2] - points[0][2]]
-		var vec2 = [points[2][0] - points[0][0], points[2][1] - points[0][1], points[2][2] - points[0][2]]
+		var vec1 = [drawpoints[1][0] - drawpoints[0][0], drawpoints[1][1] - drawpoints[0][1], drawpoints[1][2] - drawpoints[0][2]]
+		var vec2 = [drawpoints[2][0] - drawpoints[0][0], drawpoints[2][1] - drawpoints[0][1], drawpoints[2][2] - drawpoints[0][2]]
 
-		var normal = normalize(math.cross(vec2, vec1))
-		var lightAngle = math.abs(math.dot(normal, lightDir))
+		var normal = normalize(math.cross(vec1, vec2))
+		var lightAngle = (math.dot(normal, lightDir))
 
 		var colorStrength = math.round(0xff*lightAngle)
 		colorStrength = colorStrength.toString(16)
-		while (colorStrength.length < 2) {
-			colorStrength = "0" + colorStrength
-		}
-
-		g.beginStroke("#000000");
-		g.moveTo(drawpoints[0][0], drawpoints[0][1]);
-		g.lineTo(drawpoints[1][0], drawpoints[1][1]);
-		g.lineTo(drawpoints[2][0], drawpoints[2][1]);
-		g.endStroke();
 
 		g.beginFill("#" + colorStrength + "0000");
 		g.moveTo(drawpoints[0][0], drawpoints[0][1]);
@@ -433,8 +465,8 @@ function draw() {
 	}
 
 	g.beginStroke("#0000ff");
-	let lx = 300 
-	let ly = 300
+	let lx = 500 
+	let ly = 400
 	g.moveTo(lx, ly);
 	g.lineTo(lx + lightDir[0]*50, ly + lightDir[1]*50);
 	g.endStroke();
